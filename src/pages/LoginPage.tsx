@@ -1,14 +1,41 @@
 import { Card, Form, Input, Button, Typography, message } from 'antd';
-import { signIn, getSession } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 
+type FormValues = {
+    email: string;
+    password: string;
+};
+
 export default function LoginPage() {
     const nav = useNavigate();
+    const [form] = Form.useForm<FormValues>();
 
     useEffect(() => {
-        if (getSession()) nav('/cars', { replace: true });
+        supabase.auth.getSession().then(({ data }) => {
+            if (data.session) nav('/cars', { replace: true });
+        });
     }, [nav]);
+
+    async function login(values: FormValues) {
+        const { email, password } = values;
+
+        const res = await supabase.auth.signInWithPassword({ email, password });
+        if (res.error) return message.error(res.error.message);
+
+        nav('/cars', { replace: true });
+    }
+
+    async function register() {
+        const values = await form.validateFields();
+        const { email, password } = values;
+
+        const res = await supabase.auth.signUp({ email, password });
+        if (res.error) return message.error(res.error.message);
+
+        message.success('Аккаунт создан. Теперь войди.');
+    }
 
     return (
         <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 16 }}>
@@ -17,30 +44,38 @@ export default function LoginPage() {
                     Вход
                 </Typography.Title>
 
-                <Form
+                <Form<FormValues>
+                    form={form}
                     layout="vertical"
-                    onFinish={(values) => {
-                        const { email, password } = values as { email: string; password: string };
-                        const res = signIn(email, password);
-                        if (!res.ok) return message.error(res.error);
-                        nav('/cars', { replace: true });
-                    }}
+                    onFinish={login}
                 >
-                    <Form.Item label="Email" name="email" rules={[{ required: true, type: 'email' }]}>
-                        <Input />
+                    <Form.Item
+                        label="Email"
+                        name="email"
+                        rules={[{ required: true, type: 'email' }]}
+                    >
+                        <Input autoComplete="email" />
                     </Form.Item>
 
-                    <Form.Item label="Пароль" name="password" rules={[{ required: true }]}>
-                        <Input.Password />
+                    <Form.Item
+                        label="Пароль"
+                        name="password"
+                        rules={[{ required: true, min: 6 }]}
+                    >
+                        <Input.Password autoComplete="current-password" />
                     </Form.Item>
 
                     <Button type="primary" htmlType="submit" block>
                         Войти
                     </Button>
 
-                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                        Пока тестовый пароль: <b>123456</b>
-                    </div>
+                    <Button
+                        style={{ marginTop: 8 }}
+                        block
+                        onClick={register}
+                    >
+                        Регистрация
+                    </Button>
                 </Form>
             </Card>
         </div>

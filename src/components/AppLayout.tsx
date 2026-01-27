@@ -1,20 +1,36 @@
 import { Layout, Menu, Button } from 'antd';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { getSession, signOut } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 
 export default function AppLayout() {
     const nav = useNavigate();
     const loc = useLocation();
+
     const [ready, setReady] = useState(false);
+    const [hasSession, setHasSession] = useState(false);
 
     useEffect(() => {
-        const s = getSession();
-        if (!s) nav('/login', { replace: true });
-        setReady(true);
-    }, [nav]);
+        let mounted = true;
 
-    if (!ready) return null;
+        supabase.auth.getSession().then(({ data }) => {
+            if (!mounted) return;
+            setHasSession(!!data.session);
+            setReady(true);
+        });
+
+        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+            setHasSession(!!session);
+        });
+
+        return () => {
+            mounted = false;
+            sub.subscription.unsubscribe();
+        };
+    }, []);
+
+    if (!ready) return <div style={{ padding: 24 }}>Loading…</div>;
+    if (!hasSession) return <Navigate to="/login" replace />;
 
     const selectedKey = loc.pathname.startsWith('/clients') ? 'clients' : 'cars';
 
@@ -36,8 +52,8 @@ export default function AppLayout() {
             <Layout>
                 <Layout.Header style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
                     <Button
-                        onClick={() => {
-                            signOut();
+                        onClick={async () => {
+                            await supabase.auth.signOut();
                             nav('/login', { replace: true });
                         }}
                     >
