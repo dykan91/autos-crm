@@ -14,18 +14,17 @@ export default function LoginPage() {
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
-            if (data.session) nav('/cars', { replace: true });
+            if (data.session) nav('/app', { replace: true });
         });
     }, [nav]);
 
     async function login(values: FormValues) {
-        const { email, password } = values;
-
-        const res = await supabase.auth.signInWithPassword({ email, password });
+        const res = await supabase.auth.signInWithPassword(values);
         if (res.error) return message.error(res.error.message);
 
-        nav('/cars', { replace: true });
+        nav('/app', { replace: true });
     }
+
 
     async function register() {
         const values = await form.validateFields();

@@ -32,30 +32,30 @@ export default function AppLayout() {
     if (!ready) return <div style={{ padding: 24 }}>Loading…</div>;
     if (!hasSession) return <Navigate to="/login" replace />;
 
-    const pathToKey: Array<[string, string]> = [
-        ['/contracts', 'contracts'],
-        ['/clients', 'clients'],
-        ['/cars', 'cars'],
-        ['/', 'dashboard'],
-    ];
 
     const selectedKey =
-        pathToKey.find(([prefix]) => loc.pathname === prefix || loc.pathname.startsWith(prefix + '/'))?.[1] ?? '';
-
+        loc.pathname.startsWith('/app/contracts') ? 'contracts' :
+            loc.pathname.startsWith('/app/clients') ? 'clients' :
+                loc.pathname.startsWith('/app/cars') ? 'cars' :
+                    'dashboard';
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Layout.Sider breakpoint="lg" collapsedWidth="0">
-                <div style={{ color: 'white', padding: 16, fontWeight: 600 }}>Auto CRM</div>
+                <div
+                    style={{ color: 'white', padding: 16, fontWeight: 600 }}
+                    onClick={() => {
+                    nav('/');
+                    }}>
+                    Auto CRM</div>
                 <Menu
                     theme="dark"
                     mode="inline"
                     selectedKeys={[selectedKey]}
                     items={[
-                        { key: 'dashboard', label: 'Dashboard', onClick: () => nav('/') },
-                        { key: 'cars', label: 'Машины', onClick: () => nav('/cars') },
-                        { key: 'clients', label: 'Клиенты', onClick: () => nav('/clients') },
-                        { key: 'contracts', label: 'Договоры', onClick: () => nav('/contracts') },
-
+                        { key: 'dashboard', label: 'Dashboard', onClick: () => nav('/app') },
+                        { key: 'cars', label: 'Машины', onClick: () => nav('/app/cars') },
+                        { key: 'clients', label: 'Клиенты', onClick: () => nav('/app/clients') },
+                        { key: 'contracts', label: 'Договоры', onClick: () => nav('/app/contracts') },
                     ]}
                 />
             </Layout.Sider>
