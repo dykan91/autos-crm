@@ -38,8 +38,27 @@ export default function LoginPage() {
     }
 
     return (
-        <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 16 }}>
-            <Card style={{ width: 380 }}>
+        <div
+            style={{
+                minHeight: '100vh',
+                padding: 24,
+                background: 'linear-gradient(180deg, #f5f7ff 0%, #ffffff 60%)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+            }}
+        >
+            <div style={{ width: 420, maxWidth: '100%' }}>
+                <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <Typography.Title level={2} style={{ marginBottom: 4 }}>
+                        Auto CRM
+                    </Typography.Title>
+                    <Typography.Text type="secondary">
+                        Вход в систему учёта авто и клиентов
+                    </Typography.Text>
+                </div>
+
+                <Card style={{ width: '100%' }}>
                 <Typography.Title level={3} style={{ marginTop: 0 }}>
                     Вход
                 </Typography.Title>
@@ -78,6 +97,11 @@ export default function LoginPage() {
                     </Button>
                 </Form>
             </Card>
+                <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 12 }}>
+                    © {new Date().getFullYear()} Auto CRM
+                </Typography.Text>
+            </div>
         </div>
     );
+
 }

@@ -32,7 +32,15 @@ export default function AppLayout() {
     if (!ready) return <div style={{ padding: 24 }}>Loading…</div>;
     if (!hasSession) return <Navigate to="/login" replace />;
 
-    const selectedKey = loc.pathname.startsWith('/clients') ? 'clients' : 'cars';
+    const pathToKey: Array<[string, string]> = [
+        ['/contracts', 'contracts'],
+        ['/clients', 'clients'],
+        ['/cars', 'cars'],
+        ['/', 'dashboard'],
+    ];
+
+    const selectedKey =
+        pathToKey.find(([prefix]) => loc.pathname === prefix || loc.pathname.startsWith(prefix + '/'))?.[1] ?? '';
 
     return (
         <Layout style={{ minHeight: '100vh' }}>
@@ -43,8 +51,11 @@ export default function AppLayout() {
                     mode="inline"
                     selectedKeys={[selectedKey]}
                     items={[
+                        { key: 'dashboard', label: 'Dashboard', onClick: () => nav('/') },
                         { key: 'cars', label: 'Машины', onClick: () => nav('/cars') },
                         { key: 'clients', label: 'Клиенты', onClick: () => nav('/clients') },
+                        { key: 'contracts', label: 'Договоры', onClick: () => nav('/contracts') },
+
                     ]}
                 />
             </Layout.Sider>
