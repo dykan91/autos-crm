@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Checkbox, Form, Input, InputNumber, Modal, Select, Space, message } from 'antd';
-import type { FormInstance } from 'antd';
+import { Checkbox, Form, Input, InputNumber, Modal, Select, message } from 'antd';
 
 import { supabase } from '../../lib/supabase';
 
