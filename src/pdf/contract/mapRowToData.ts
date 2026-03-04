@@ -1,6 +1,6 @@
-import type { ContractRowView } from '../contractPdf';
 import type { ContractPdfData } from './types';
 import { formatDateDE } from './template/utils';
+import type {ContractRowView} from '../../pages/ContractsPage.tsx';
 
 export function mapRowToContractPdfData(row: ContractRowView): ContractPdfData {
     const car = row.car!;
