@@ -19,6 +19,7 @@ import { PlusOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons'
 
 import { supabase } from '../lib/supabase';
 import type { CarRow } from '../types/Car';
+import { exportCarsToExcel } from '../utils/exportCarsToExcel';
 
 type CarStatus = 'In Stock' | 'Reserved' | 'Sold';
 
@@ -26,6 +27,12 @@ type CarFormValues = {
     kaufdatum: string;
     fahrzeug: string;
     vin: string;
+
+    // NEW (для договора/PDF)
+    kfz_brief_nr?: string | null;
+    ez?: string | null; // YYYY-MM-DD
+    farbe?: string | null;
+
     einkaufspreis: number;
     verkaufspreis?: number | null;
     verkaufsdatum?: string | null;
@@ -50,10 +57,6 @@ function statusTag(s: CarStatus) {
     return <Tag>{s}</Tag>;
 }
 
-import { exportCarsToExcel } from '../utils/exportCarsToExcel';
-
-
-
 function CarForm({
                      form,
                      onFinish,
@@ -75,6 +78,23 @@ function CarForm({
 
             <Form.Item name="vin" label="VIN" rules={[{ required: true }]}>
                 <Input />
+            </Form.Item>
+
+            {/* NEW fields (не выводим в таблицу, только в форме) */}
+            <Form.Item name="kfz_brief_nr" label="KFZ-Brief Nr. (optional)">
+                <Input placeholder="Напр. XD 548416" />
+            </Form.Item>
+
+            <Form.Item
+                name="ez"
+                label="EZ (Erstzulassung) (optional)"
+                extra="Дата первой регистрации (YYYY-MM-DD)"
+            >
+                <Input placeholder="YYYY-MM-DD" />
+            </Form.Item>
+
+            <Form.Item name="farbe" label="Farbe (optional)">
+                <Input placeholder="Напр. Schwarz" />
             </Form.Item>
 
             <Form.Item name="einkaufspreis" label="Einkaufspreis" rules={[{ required: true }]}>
@@ -118,6 +138,7 @@ export function CarsPage() {
     const load = useCallback(async () => {
         setLoading(true);
 
+        // select('*') оставляем — новые поля подтянутся автоматически
         const { data, error } = await supabase.from('cars').select('*');
 
         if (error) {
@@ -172,8 +193,8 @@ export function CarsPage() {
         async (row: CarRow, nextStatus: CarStatus) => {
             const patch: Partial<CarRow> = { status: nextStatus };
 
-            if (nextStatus === 'Sold' && !row.verkaufsdatum) {
-                patch.verkaufsdatum = new Date().toISOString().slice(0, 10);
+            if (nextStatus === 'Sold' && !(row as any).verkaufsdatum) {
+                (patch as any).verkaufsdatum = new Date().toISOString().slice(0, 10);
             }
 
             const { error } = await supabase.from('cars').update(patch).eq('id', row.id);
@@ -197,6 +218,12 @@ export function CarsPage() {
                 kaufdatum,
                 fahrzeug: values.fahrzeug,
                 vin: values.vin,
+
+                // NEW
+                kfz_brief_nr: values.kfz_brief_nr ?? null,
+                ez: values.ez ?? null,
+                farbe: values.farbe ?? null,
+
                 einkaufspreis: values.einkaufspreis,
                 verkaufspreis: values.verkaufspreis ?? null,
                 verkaufsdatum: null,
@@ -220,14 +247,21 @@ export function CarsPage() {
         (row: CarRow) => {
             setEditing(row);
             setEditOpen(true);
+
             editForm.setFieldsValue({
-                kaufdatum: row.kaufdatum,
-                fahrzeug: row.fahrzeug,
-                vin: row.vin,
-                einkaufspreis: row.einkaufspreis,
-                verkaufspreis: row.verkaufspreis ?? null,
-                verkaufsdatum: row.verkaufsdatum ?? null,
-                status: (row.status as CarStatus) ?? 'In Stock',
+                kaufdatum: (row as any).kaufdatum,
+                fahrzeug: (row as any).fahrzeug,
+                vin: (row as any).vin,
+
+                // NEW
+                kfz_brief_nr: (row as any).kfz_brief_nr ?? null,
+                ez: (row as any).ez ?? null,
+                farbe: (row as any).farbe ?? null,
+
+                einkaufspreis: (row as any).einkaufspreis,
+                verkaufspreis: (row as any).verkaufspreis ?? null,
+                verkaufsdatum: (row as any).verkaufsdatum ?? null,
+                status: ((row as any).status as CarStatus) ?? 'In Stock',
             });
         },
         [editForm]
@@ -243,6 +277,12 @@ export function CarsPage() {
                     kaufdatum: values.kaufdatum,
                     fahrzeug: values.fahrzeug,
                     vin: values.vin,
+
+                    // NEW
+                    kfz_brief_nr: values.kfz_brief_nr ?? null,
+                    ez: values.ez ?? null,
+                    farbe: values.farbe ?? null,
+
                     einkaufspreis: values.einkaufspreis,
                     verkaufspreis: values.verkaufspreis ?? null,
                     verkaufsdatum: values.verkaufsdatum ?? null,
@@ -263,6 +303,7 @@ export function CarsPage() {
         [editing, load]
     );
 
+    // ВАЖНО: новые поля НЕ добавляем в columns
     const columns: ColumnsType<CarRow> = [
         { title: 'Nr', dataIndex: 'nr', width: 80 },
         { title: 'Kaufdatum', dataIndex: 'kaufdatum', width: 120 },
@@ -327,7 +368,7 @@ export function CarsPage() {
                 </Typography.Title>
 
                 <Space>
-                    <Button icon={<DownloadOutlined />}   onClick={() => exportCarsToExcel(data)}>
+                    <Button icon={<DownloadOutlined />} onClick={() => exportCarsToExcel(data)}>
                         Выгрузить в Excel
                     </Button>
 
@@ -339,6 +380,11 @@ export function CarsPage() {
                             createForm.setFieldsValue({
                                 status: 'In Stock',
                                 kaufdatum: new Date().toISOString().slice(0, 10),
+
+                                // NEW defaults (optional)
+                                kfz_brief_nr: null,
+                                ez: null,
+                                farbe: null,
                             });
                         }}
                     >
