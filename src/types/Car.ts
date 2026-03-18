@@ -6,6 +6,9 @@ export type CarRow = {
     kaufdatum: string;      // 'YYYY-MM-DD'
     fahrzeug: string;
     vin: string;
+    kfz_brief_nr: string | null;
+    ez: string | null;
+    farbe: string | null;
     einkaufspreis: number;
     verkaufspreis: number | null;
     verkaufsdatum: string | null;

@@ -13,11 +13,14 @@
     "@ant-design/plots": "^2.6.8",
     "@supabase/supabase-js": "^2.93.1",
     "antd": "^6.2.2",
+    "dayjs": "^1.11.20",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
-    "jspdf": "^4.0.0",
+    "i18next": "^25.8.18",
+    "jspdf": "^4.2.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^16.5.8",
     "react-router-dom": "^7.13.0"
   },
   "devDependencies": {

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Button,
     Card,
+    DatePicker,
     Form,
     Input,
     InputNumber,
@@ -16,6 +17,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd';
 import { PlusOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
 
 import { supabase } from '../lib/supabase';
 import type { CarRow } from '../types/Car';
@@ -24,18 +27,15 @@ import { exportCarsToExcel } from '../utils/exportCarsToExcel';
 type CarStatus = 'In Stock' | 'Reserved' | 'Sold';
 
 type CarFormValues = {
-    kaufdatum: string;
+    kaufdatum: dayjs.Dayjs | null;
     fahrzeug: string;
     vin: string;
-
-    // NEW (для договора/PDF)
     kfz_brief_nr?: string | null;
-    ez?: string | null; // YYYY-MM-DD
+    ez?: dayjs.Dayjs | null;
     farbe?: string | null;
-
     einkaufspreis: number;
     verkaufspreis?: number | null;
-    verkaufsdatum?: string | null;
+    verkaufsdatum?: dayjs.Dayjs | null;
     status: CarStatus;
 };
 
@@ -58,60 +58,57 @@ function statusTag(s: CarStatus) {
 }
 
 function CarForm({
-                     form,
-                     onFinish,
-                     mode,
-                 }: {
+    form,
+    onFinish,
+    mode,
+}: {
     form: FormInstance<CarFormValues>;
     onFinish: (v: CarFormValues) => void;
     mode: 'create' | 'edit';
 }) {
+    const { t } = useTranslation();
+
     return (
         <Form form={form} layout="vertical" onFinish={onFinish}>
-            <Form.Item name="kaufdatum" label="Kaufdatum" rules={[{ required: true }]}>
-                <Input placeholder="YYYY-MM-DD" />
+            <Form.Item name="kaufdatum" label={t('cars.fields.kaufdatum')} rules={[{ required: true }]}>
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
             </Form.Item>
 
-            <Form.Item name="fahrzeug" label="Fahrzeug" rules={[{ required: true }]}>
+            <Form.Item name="fahrzeug" label={t('cars.fields.fahrzeug')} rules={[{ required: true }]}>
                 <Input />
             </Form.Item>
 
-            <Form.Item name="vin" label="VIN" rules={[{ required: true }]}>
+            <Form.Item name="vin" label={t('cars.fields.vin')} rules={[{ required: true }]}>
                 <Input />
             </Form.Item>
 
-            {/* NEW fields (не выводим в таблицу, только в форме) */}
-            <Form.Item name="kfz_brief_nr" label="KFZ-Brief Nr. (optional)">
-                <Input placeholder="Напр. XD 548416" />
+            <Form.Item name="kfz_brief_nr" label={t('cars.fields.kfzBriefNr')}>
+                <Input placeholder={t('cars.placeholders.kfzBriefNr')} />
             </Form.Item>
 
-            <Form.Item
-                name="ez"
-                label="EZ (Erstzulassung) (optional)"
-                extra="Дата первой регистрации (YYYY-MM-DD)"
-            >
-                <Input placeholder="YYYY-MM-DD" />
+            <Form.Item name="ez" label={t('cars.fields.ez')} extra={t('cars.fields.ezHint')}>
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
             </Form.Item>
 
-            <Form.Item name="farbe" label="Farbe (optional)">
-                <Input placeholder="Напр. Schwarz" />
+            <Form.Item name="farbe" label={t('cars.fields.farbe')}>
+                <Input placeholder={t('cars.placeholders.farbe')} />
             </Form.Item>
 
-            <Form.Item name="einkaufspreis" label="Einkaufspreis" rules={[{ required: true }]}>
+            <Form.Item name="einkaufspreis" label={t('cars.fields.einkaufspreis')} rules={[{ required: true }]}>
                 <InputNumber style={{ width: '100%' }} min={0} step={100} />
             </Form.Item>
 
-            <Form.Item name="verkaufspreis" label="Verkaufspreis">
+            <Form.Item name="verkaufspreis" label={t('cars.fields.verkaufspreis')}>
                 <InputNumber style={{ width: '100%' }} min={0} step={100} />
             </Form.Item>
 
             {mode === 'edit' && (
-                <Form.Item name="verkaufsdatum" label="Verkaufsdatum">
-                    <Input placeholder="YYYY-MM-DD или пусто" />
+                <Form.Item name="verkaufsdatum" label={t('cars.fields.verkaufsdatum')}>
+                    <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
                 </Form.Item>
             )}
 
-            <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+            <Form.Item name="status" label={t('cars.fields.status')} rules={[{ required: true }]}>
                 <Select<CarStatus>
                     options={[
                         { value: 'In Stock', label: 'In Stock' },
@@ -124,9 +121,22 @@ function CarForm({
     );
 }
 
+function toDateStr(d: dayjs.Dayjs | null | undefined): string | null {
+    if (!d || !dayjs.isDayjs(d)) return null;
+    return d.format('YYYY-MM-DD');
+}
+
+function toDayjs(s: string | null | undefined): dayjs.Dayjs | null {
+    if (!s) return null;
+    return dayjs(s, 'YYYY-MM-DD');
+}
+
 export function CarsPage() {
+    const { t } = useTranslation();
     const [data, setData] = useState<CarRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<CarStatus | 'all'>('all');
 
     const [createOpen, setCreateOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
@@ -136,13 +146,9 @@ export function CarsPage() {
     const [editForm] = Form.useForm<CarFormValues>();
 
     const load = useCallback(async () => {
-        setLoading(true);
-
-        // select('*') оставляем — новые поля подтянутся автоматически
         const { data, error } = await supabase.from('cars').select('*');
 
         if (error) {
-            console.error(error);
             message.error(error.message);
             setData([]);
             setLoading(false);
@@ -160,108 +166,77 @@ export function CarsPage() {
         setLoading(false);
     }, []);
 
-    useEffect(() => {
-        let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    useEffect(() => { void load(); }, [load]);
 
-        (async () => {
-            setLoading(true);
-            const { data, error } = await supabase.from('cars').select('*');
-
-            if (cancelled) return;
-
-            if (error) {
-                message.error(error.message);
-                setData([]);
-            } else {
-                const rows = ((data ?? []) as CarRow[]).slice().sort((a, b) => {
-                    const sa = STATUS_ORDER[a.status as CarStatus] ?? 999;
-                    const sb = STATUS_ORDER[b.status as CarStatus] ?? 999;
-                    if (sa !== sb) return sa - sb;
-                    return (a.nr ?? 0) - (b.nr ?? 0);
-                });
-                setData(rows);
-            }
-            setLoading(false);
-        })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+    // Фильтрация на клиенте
+    const filtered = useMemo(() => {
+        let rows = data;
+        if (statusFilter !== 'all') rows = rows.filter(r => r.status === statusFilter);
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            rows = rows.filter(r =>
+                r.fahrzeug?.toLowerCase().includes(q) ||
+                r.vin?.toLowerCase().includes(q)
+            );
+        }
+        return rows;
+    }, [data, search, statusFilter]);
 
     const updateStatus = useCallback(
         async (row: CarRow, nextStatus: CarStatus) => {
             const patch: Partial<CarRow> = { status: nextStatus };
-
-            if (nextStatus === 'Sold' && !(row as any).verkaufsdatum) {
-                (patch as any).verkaufsdatum = new Date().toISOString().slice(0, 10);
+            if (nextStatus === 'Sold' && !row.verkaufsdatum) {
+                patch.verkaufsdatum = new Date().toISOString().slice(0, 10);
             }
-
             const { error } = await supabase.from('cars').update(patch).eq('id', row.id);
-            if (error) {
-                message.error(error.message);
-                return;
-            }
-
-            message.success('Статус обновлён');
+            if (error) { message.error(error.message); return; }
+            message.success(t('cars.statusUpdated'));
+            setLoading(true);
             await load();
         },
-        [load]
+        [load, t]
     );
 
     const createCar = useCallback(
         async (values: CarFormValues) => {
-            const kaufdatum = values.kaufdatum || new Date().toISOString().slice(0, 10);
-            const status: CarStatus = values.status || 'In Stock';
-
             const { error } = await supabase.from('cars').insert({
-                kaufdatum,
+                kaufdatum: toDateStr(values.kaufdatum) ?? new Date().toISOString().slice(0, 10),
                 fahrzeug: values.fahrzeug,
                 vin: values.vin,
-
-                // NEW
                 kfz_brief_nr: values.kfz_brief_nr ?? null,
-                ez: values.ez ?? null,
+                ez: toDateStr(values.ez),
                 farbe: values.farbe ?? null,
-
                 einkaufspreis: values.einkaufspreis,
                 verkaufspreis: values.verkaufspreis ?? null,
                 verkaufsdatum: null,
-                status,
+                status: values.status || 'In Stock',
             });
-
-            if (error) {
-                message.error(error.message);
-                return;
-            }
-
-            message.success('Машина добавлена');
+            if (error) { message.error(error.message); return; }
+            message.success(t('cars.added'));
             setCreateOpen(false);
             createForm.resetFields();
+            setLoading(true);
             await load();
         },
-        [createForm, load]
+        [createForm, load, t]
     );
 
     const openEdit = useCallback(
         (row: CarRow) => {
             setEditing(row);
             setEditOpen(true);
-
             editForm.setFieldsValue({
-                kaufdatum: (row as any).kaufdatum,
-                fahrzeug: (row as any).fahrzeug,
-                vin: (row as any).vin,
-
-                // NEW
-                kfz_brief_nr: (row as any).kfz_brief_nr ?? null,
-                ez: (row as any).ez ?? null,
-                farbe: (row as any).farbe ?? null,
-
-                einkaufspreis: (row as any).einkaufspreis,
-                verkaufspreis: (row as any).verkaufspreis ?? null,
-                verkaufsdatum: (row as any).verkaufsdatum ?? null,
-                status: ((row as any).status as CarStatus) ?? 'In Stock',
+                kaufdatum: toDayjs(row.kaufdatum),
+                fahrzeug: row.fahrzeug,
+                vin: row.vin,
+                kfz_brief_nr: row.kfz_brief_nr ?? null,
+                ez: toDayjs(row.ez),
+                farbe: row.farbe ?? null,
+                einkaufspreis: row.einkaufspreis,
+                verkaufspreis: row.verkaufspreis ?? null,
+                verkaufsdatum: toDayjs(row.verkaufsdatum),
+                status: (row.status as CarStatus) ?? 'In Stock',
             });
         },
         [editForm]
@@ -270,67 +245,55 @@ export function CarsPage() {
     const saveEdit = useCallback(
         async (values: CarFormValues) => {
             if (!editing) return;
-
-            const { error } = await supabase
-                .from('cars')
-                .update({
-                    kaufdatum: values.kaufdatum,
-                    fahrzeug: values.fahrzeug,
-                    vin: values.vin,
-
-                    // NEW
-                    kfz_brief_nr: values.kfz_brief_nr ?? null,
-                    ez: values.ez ?? null,
-                    farbe: values.farbe ?? null,
-
-                    einkaufspreis: values.einkaufspreis,
-                    verkaufspreis: values.verkaufspreis ?? null,
-                    verkaufsdatum: values.verkaufsdatum ?? null,
-                    status: values.status,
-                })
-                .eq('id', editing.id);
-
-            if (error) {
-                message.error(error.message);
-                return;
-            }
-
-            message.success('Сохранено');
+            const { error } = await supabase.from('cars').update({
+                kaufdatum: toDateStr(values.kaufdatum) ?? editing.kaufdatum,
+                fahrzeug: values.fahrzeug,
+                vin: values.vin,
+                kfz_brief_nr: values.kfz_brief_nr ?? null,
+                ez: toDateStr(values.ez),
+                farbe: values.farbe ?? null,
+                einkaufspreis: values.einkaufspreis,
+                verkaufspreis: values.verkaufspreis ?? null,
+                verkaufsdatum: toDateStr(values.verkaufsdatum),
+                status: values.status,
+            }).eq('id', editing.id);
+            if (error) { message.error(error.message); return; }
+            message.success(t('common.saved'));
             setEditOpen(false);
             setEditing(null);
+            setLoading(true);
             await load();
         },
-        [editing, load]
+        [editing, load, t]
     );
 
-    // ВАЖНО: новые поля НЕ добавляем в columns
-    const columns: ColumnsType<CarRow> = [
-        { title: 'Nr', dataIndex: 'nr', width: 80 },
-        { title: 'Kaufdatum', dataIndex: 'kaufdatum', width: 120 },
-        { title: 'Fahrzeug', dataIndex: 'fahrzeug' },
-        { title: 'VIN', dataIndex: 'vin', width: 220 },
+    const columns: ColumnsType<CarRow> = useMemo(() => [
+        { title: 'Nr', dataIndex: 'nr', width: 70 },
+        { title: t('cars.fields.kaufdatum'), dataIndex: 'kaufdatum', width: 120 },
+        { title: t('cars.fields.fahrzeug'), dataIndex: 'fahrzeug' },
+        { title: t('cars.fields.vin'), dataIndex: 'vin', width: 200 },
         {
-            title: 'Einkaufspreis',
+            title: t('cars.fields.einkaufspreis'),
             dataIndex: 'einkaufspreis',
             width: 140,
             render: (v: number) => formatMoney(v),
         },
         {
-            title: 'Verkaufspreis',
+            title: t('cars.fields.verkaufspreis'),
             dataIndex: 'verkaufspreis',
             width: 140,
             render: (v: number | null) => formatMoney(v),
         },
         {
-            title: 'Verkaufsdatum',
+            title: t('cars.fields.verkaufsdatum'),
             dataIndex: 'verkaufsdatum',
-            width: 140,
+            width: 130,
             render: (v: unknown) => (typeof v === 'string' && v.length ? v : '—'),
         },
         {
-            title: 'Status',
+            title: t('cars.fields.status'),
             dataIndex: 'status',
-            width: 200,
+            width: 210,
             render: (_: unknown, row) => (
                 <Space>
                     {statusTag(row.status as CarStatus)}
@@ -349,29 +312,28 @@ export function CarsPage() {
             ),
         },
         {
-            title: 'Aktion',
+            title: t('common.actions'),
             key: 'action',
             width: 120,
             render: (_: unknown, row) => (
                 <Button icon={<EditOutlined />} onClick={() => openEdit(row)}>
-                    Edit
+                    {t('common.edit')}
                 </Button>
             ),
         },
-    ];
+    ], [t, openEdit, updateStatus]);
 
     return (
         <Card>
-            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                 <Typography.Title level={3} style={{ margin: 0 }}>
-                    Машины
+                    {t('cars.title')}
                 </Typography.Title>
 
-                <Space>
+                <Space wrap>
                     <Button icon={<DownloadOutlined />} onClick={() => exportCarsToExcel(data)}>
-                        Выгрузить в Excel
+                        {t('cars.exportExcel')}
                     </Button>
-
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -379,47 +341,67 @@ export function CarsPage() {
                             setCreateOpen(true);
                             createForm.setFieldsValue({
                                 status: 'In Stock',
-                                kaufdatum: new Date().toISOString().slice(0, 10),
-
-                                // NEW defaults (optional)
+                                kaufdatum: dayjs(),
                                 kfz_brief_nr: null,
                                 ez: null,
                                 farbe: null,
                             });
                         }}
                     >
-                        Добавить
+                        {t('cars.addButton')}
                     </Button>
                 </Space>
             </Space>
 
             <div style={{ height: 16 }} />
 
+            {/* Поиск и фильтр */}
+            <Space style={{ marginBottom: 16 }} wrap>
+                <Input.Search
+                    placeholder={t('cars.searchPlaceholder')}
+                    allowClear
+                    style={{ width: 280 }}
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                />
+                <Select<CarStatus | 'all'>
+                    value={statusFilter}
+                    style={{ width: 150 }}
+                    onChange={setStatusFilter}
+                    options={[
+                        { value: 'all', label: t('cars.allStatuses') },
+                        { value: 'In Stock', label: 'In Stock' },
+                        { value: 'Reserved', label: 'Reserved' },
+                        { value: 'Sold', label: 'Sold' },
+                    ]}
+                />
+            </Space>
+
             <Table
                 rowKey="id"
                 loading={loading}
                 columns={columns}
-                dataSource={data}
+                dataSource={filtered}
                 pagination={{ pageSize: 10 }}
                 scroll={{ x: 1200 }}
             />
 
             <Modal
-                title="Добавить машину"
+                title={t('cars.addModal')}
                 open={createOpen}
                 onCancel={() => setCreateOpen(false)}
                 onOk={() => createForm.submit()}
-                okText="Создать"
+                okText={t('common.create')}
             >
                 <CarForm form={createForm} onFinish={createCar} mode="create" />
             </Modal>
 
             <Modal
-                title={`Редактировать машину ${editing?.nr ?? ''}`}
+                title={t('cars.editModal', { nr: editing?.nr ?? '' })}
                 open={editOpen}
                 onCancel={() => setEditOpen(false)}
                 onOk={() => editForm.submit()}
-                okText="Сохранить"
+                okText={t('common.save')}
             >
                 <CarForm form={editForm} onFinish={saveEdit} mode="edit" />
             </Modal>

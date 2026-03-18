@@ -14,3 +14,5 @@ export function renderTextsBlock(pdf: jsPDF, startY: number) {
 
     return y;
 }
+
+
